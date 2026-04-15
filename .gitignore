@@ -1,3 +1,5 @@
+#executable
+build/vimview
 # C++ objects and libs
 *.slo
 *.lo
