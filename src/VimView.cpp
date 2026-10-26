@@ -27,6 +27,8 @@ VimView::VimView(char	*startup_file_name)
    globalImageSkipValue = 1;
    numberOfSwitches = 0;
    powerControlWidget = nullptr;
+   // NCD data arrives on the LCM thread; queue it over to the GUI thread
+   connect(this, SIGNAL(ncdDataReceived(QByteArray)), this, SLOT(updateRelayStates(QByteArray)), Qt::QueuedConnection);
    int systemParameterSize;
 
    myLcm = new lcm::LCM("udpm://239.255.76.67:7667?ttl=0");
@@ -213,11 +215,17 @@ void VimView::setAltitude(double theAltitude)
    storedAltitude = theAltitude;
 }
 
-void VimView::setNCDData(const int8_t *theRelays)
+void VimView::setNCDData(const int8_t *theRelays, int numberOfRelays)
 {
-   if(powerControlWidget)
+   // called from the LCM thread: copy the states, the message buffer won't outlive the callback
+   emit ncdDataReceived(QByteArray(reinterpret_cast<const char *>(theRelays), numberOfRelays));
+}
+
+void VimView::updateRelayStates(QByteArray theRelayStates)
+{
+   if(powerControlWidget && theRelayStates.size() >= MAX_NUMBER_OF_SWITCHES)
    {
-      powerControlWidget->setRelayStates(theRelays);
+      powerControlWidget->setRelayStates(reinterpret_cast<const int8_t *>(theRelayStates.constData()));
    }
 }
 

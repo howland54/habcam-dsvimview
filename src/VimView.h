@@ -51,7 +51,7 @@ public:
    void                   setCTD(double depth, double temp);
    void                   setGPS(double latitude, double longitude);
    void                   setCalcDepth(double theCalcDepth);
-   void                   setNCDData(const int8_t *theRelayData);
+   void                   setNCDData(const int8_t *theRelayData, int numberOfRelays);
 private:
    QLabel                 *imageArea[MAX_N_OF_CAMERAS];
    bool                    equalizeDisplay[MAX_N_OF_CAMERAS];
@@ -98,6 +98,7 @@ public slots:
 
 private slots:
    void                   updateImage(int theImage);
+   void                   updateRelayStates(QByteArray theRelayStates);
    void                   changeExposureValue(double newExposure, int theCamera);
    void                   changeGainValue(double newGain, int theCamera);
    void                   changeConstancySetting(bool newValue);
@@ -122,6 +123,7 @@ private slots:
 
 signals:
   void                    closing();
+  void                    ncdDataReceived(QByteArray theRelayStates);
 };
 
 #endif // FLYVIEW_H
