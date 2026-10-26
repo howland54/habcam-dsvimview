@@ -7,15 +7,12 @@
 #include <lcm/lcm-cpp.hpp>
 
 #include "VimCameraControl.h"
-//#include "LightControlWidget.h"
 #include "SystemParameterControl.h"
 #include "SensorPage.h"
 #include "cameradefines.h"
 #include "Stwinch.h"
-
-#define GARDA_SOCKET_NUMBER 30313
-
-#define DEFAULT_GARDA_IP_ADDRESS "192.168.135.91"
+#include "PowerControlWidget.h"
+#include "../../habcam-lcmtypes/ncd_io/ncd_io/NcdIoState_t.hpp"
 
 
 
@@ -53,8 +50,8 @@ public:
    void                   setFishAttitude(double heading, double pitch, double roll);
    void                   setCTD(double depth, double temp);
    void                   setGPS(double latitude, double longitude);
-
    void                   setCalcDepth(double theCalcDepth);
+   void                   setNCDData(const int8_t *theRelayData);
 private:
    QLabel                 *imageArea[MAX_N_OF_CAMERAS];
    bool                    equalizeDisplay[MAX_N_OF_CAMERAS];
@@ -90,6 +87,10 @@ private:
    double storedAltitude;
    double storedDepth;
 
+   switchType               switches[MAX_NUMBER_OF_SWITCHES];
+   int                      numberOfSwitches;
+   PowerControlWidget       *powerControlWidget;
+
 
 public slots:
 
@@ -117,6 +118,7 @@ private slots:
    void                   setSkipValue(int theValue);
    void                   imageHide(int whichImage, bool hideOrNot);
    void                   checkImgReceipt();
+   void                   powerButtonClicked(int whichButton, int theState);
 
 signals:
   void                    closing();

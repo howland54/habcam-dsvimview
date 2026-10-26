@@ -40,6 +40,8 @@ LIBS += -lopencv_videoio
 
 
 SOURCES += main.cpp\
+    PowerButton.cpp \
+    PowerControlWidget.cpp \
     SensorPage.cpp \
     SystemParameterControl.cpp \
         VimView.cpp \
@@ -52,6 +54,8 @@ SOURCES += main.cpp\
 
 HEADERS  += VimView.h \
     ImageAcquisitionThread.h \
+    PowerButton.h \
+    PowerControlWidget.h \
     SensorPage.h \
     SystemParameterControl.h \
     VimCameraControl.h \

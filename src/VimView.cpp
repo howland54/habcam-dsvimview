@@ -25,6 +25,8 @@ VimView::VimView(char	*startup_file_name)
    char *subscriptionNames[MAX_N_OF_CAMERAS];
    lastImageDateTime = QDateTime::currentDateTimeUtc().addSecs(-1000);
    globalImageSkipValue = 1;
+   numberOfSwitches = 0;
+   powerControlWidget = nullptr;
    int systemParameterSize;
 
    myLcm = new lcm::LCM("udpm://239.255.76.67:7667?ttl=0");
@@ -46,6 +48,20 @@ VimView::VimView(char	*startup_file_name)
       {
          systemParameterControl = new SystemParameterControl();
          connect(systemParameterControl,SIGNAL(emitSkipValue(int)),this, SLOT(setSkipValue(int)));
+
+         for (int switchNumber = 0; switchNumber < MAX_NUMBER_OF_SWITCHES; switchNumber++)
+         {
+            char switchLabel[255];
+            snprintf(switchLabel,254,"RELAY_%d",switchNumber+1 );
+            char *candidateSwitchName = iniFile.readString("NCD_IO",switchLabel, "NO_SWITCH");
+            if(!strcmp(candidateSwitchName,"NO_SWITCH"))
+                {
+                    continue;
+                }
+            switches[switchNumber].attachedTo = strdup(candidateSwitchName);
+            switches[switchNumber].relayNumber = switchNumber;
+            numberOfSwitches++;
+         }
 
          microstrainTimeoutCriteria = iniFile.readDouble("GENERAL", "MICROSTRAIN_TIMEOUT", DEFAULT_MICROSTRAIN_TIMEOUT);
          gpsTimeoutCriteria = iniFile.readDouble("GENERAL", "GPS_TIMEOUT", DEFAULT_GPS_TIMEOUT);
@@ -69,16 +85,19 @@ VimView::VimView(char	*startup_file_name)
             {
                char cameraLabel[32];
                snprintf(cameraLabel,32,"CAMERA_%d",cameraNumber+1);
-               subscriptionNames[nOfCameras] = iniFile.readString(cameraLabel,"COLOR_CHANNEL_NAME","NONAME");
+               char *channelName = iniFile.readString(cameraLabel,"COLOR_CHANNEL_NAME","NONAME");
 
                char *thisSN = iniFile.readString(cameraLabel,"SERIAL_NUMBER", NO_SERIAL_NUMBER);
                if(!strcmp(thisSN,NO_SERIAL_NUMBER))
                   {
                      free(thisSN );
+                     free(channelName);
                   }
                else
                   {
+                     subscriptionNames[nOfCameras] = channelName;
                      vimCameraControl[nOfCameras] = new VimCameraControl(nOfCameras,(QString)thisSN, this);
+                     free(thisSN);
                      int isColor = iniFile.readInt(cameraLabel,"IS_COLOR", 0);
                      int xSize = iniFile.readInt(cameraLabel,"X_DISPLAY_SIZE", 612);
                      systemParameterSize = xSize;
@@ -115,19 +134,16 @@ VimView::VimView(char	*startup_file_name)
 
             }
          //systemParameterControl->setFixedWidth(systemParameterSize);
-#if 0
-         char *gardaIPAddress = iniFile.readString("GARDA","IP_ADDRESS",DEFAULT_GARDA_IP_ADDRESS);
-         netSocket = new QUdpSocket();
-         gardaAddress.setAddress(gardaIPAddress);
-         gardaSocketNumber = GARDA_SOCKET_NUMBER;
-         netSocket->bind(GARDA_SOCKET_NUMBER);
-#endif
 
 
       }
 
-
-
+   powerControlWidget = new PowerControlWidget (this);
+   for(int relayNumber = 0; relayNumber < numberOfSwitches; relayNumber++)
+    {
+        powerControlWidget->addAButton(switches[relayNumber], this) ;
+    }
+   powerControlWidget->drawLayout();
    iniFile.closeIni();
    QVBoxLayout *masterLayout = new QVBoxLayout(this);
 
@@ -163,6 +179,7 @@ VimView::VimView(char	*startup_file_name)
                  }
                imageProviderThread[thisCamera]->setSubscriptionName(theSubscriptionName);
             }
+         free(subscriptionNames[thisCamera]);
          imageProviderThread[thisCamera]->start();
 
          qRegisterMetaType < QVector<float> >("QVector<float>");
@@ -174,6 +191,8 @@ VimView::VimView(char	*startup_file_name)
    currentTimeLabel = new QLabel("current time: ");
    masterLayout->addLayout(imagePairLayout);
    masterLayout->addWidget(systemParameterControl);
+   masterLayout->addWidget(powerControlWidget);
+
    masterLayout->addWidget(currentTimeLabel);
    stWinch = new StWinch(startup_file_name);
    stWinch->show();
@@ -193,6 +212,15 @@ void VimView::setAltitude(double theAltitude)
    sensorPage->setAltimeter(theAltitude);
    storedAltitude = theAltitude;
 }
+
+void VimView::setNCDData(const int8_t *theRelays)
+{
+   if(powerControlWidget)
+   {
+      powerControlWidget->setRelayStates(theRelays);
+   }
+}
+
 
 void VimView::setCalcDepth(double theCalcDepth)
 {
@@ -254,16 +282,12 @@ void VimView::checkImgReceipt()
 
 void VimView::imageHide(int whichImage, bool hideOrNot)
 {
-   if(0 == whichImage)
+   if(whichImage < 0 || whichImage >= nOfCameras)
       {
-         imageArea[0]->setVisible(hideOrNot) ;
-         vimCameraControl[0]->setVisible(hideOrNot);
+         return;
       }
-   else
-      {
-         imageArea[1]->setVisible(hideOrNot) ;
-         vimCameraControl[1]->setVisible(hideOrNot);
-      }
+   imageArea[whichImage]->setVisible(hideOrNot) ;
+   vimCameraControl[whichImage]->setVisible(hideOrNot);
 }
 
 void VimView::makeActive(bool activeState)
@@ -317,15 +341,7 @@ void VimView::showSensors(bool showIt)
          sensorPage->hide();
       }
 }
-#if 0
-void VimView::sendGardaRateChange(int theInt)
-{
-   char command[32];
-   int len = sprintf(command,"RB1,%dms\r",theInt);
-   netSocket->writeDatagram(command,len,gardaAddress,gardaSocketNumber);
 
-}
-#endif
 
 void VimView::setDisplaySize(int cameraNumber, int width, int height)
 {
@@ -336,7 +352,7 @@ void VimView::setDisplaySize(int cameraNumber, int width, int height)
 void VimView::setExposureActual(double theExposure, int theCamera)
 {
 
-   if(isActive)
+   if(isActive && theCamera >= 0 && theCamera < nOfCameras)
       {
          vimCameraControl[theCamera]->setExposureActual(theExposure);
       }
@@ -345,7 +361,7 @@ void VimView::setExposureActual(double theExposure, int theCamera)
 void VimView::setGainActual(double theGain, int theCamera)
 {
 
-   if(isActive)
+   if(isActive && theCamera >= 0 && theCamera < nOfCameras)
       {
          vimCameraControl[theCamera]->setGainActual(theGain);
       }
@@ -354,7 +370,7 @@ void VimView::setGainActual(double theGain, int theCamera)
 void VimView::setTriggerSource(int theSource, int theCamera)
 {
 
-   if(isActive)
+   if(isActive && theCamera >= 0 && theCamera < nOfCameras)
       {
          vimCameraControl[theCamera]->setTriggerSource(theSource);
       }
@@ -545,8 +561,32 @@ void VimView::setSkipValue(int theValue)
    globalImageSkipValue = imageSkipvalue;
 }
 
+void    VimView::powerButtonClicked(int whichButton, int theState)
+{
+    image::image_parameter_t imageParameter;
+    imageParameter.key = "POWER_BUTTON";
+    if(theState)
+       {
+          imageParameter.value = "1" ;
+       }
+    else
+       {
+          imageParameter.value = "0" ;
+       }
+    imageParameter.cameraNumber = whichButton;
+    myLcm->publish("COMMAND_PARAMETERS",&imageParameter);
+
+}
 void VimView::shutDown()
 {
+   for(int thisCamera = 0; thisCamera < nOfCameras; thisCamera++)
+      {
+         imageProviderThread[thisCamera]->requestStop();
+      }
+   for(int thisCamera = 0; thisCamera < nOfCameras; thisCamera++)
+      {
+         imageProviderThread[thisCamera]->wait();
+      }
 
    stWinch->close();
    sensorPage->close();

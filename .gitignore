@@ -1,5 +1,6 @@
-#executable
-build/vimview
+# build output (keep the runtime config)
+build/*
+!build/vimview.ini
 # C++ objects and libs
 *.slo
 *.lo
@@ -55,4 +56,3 @@ compile_commands.json
 
 *_qmlcache.qrc
 
-build/.qtc_clangd/*

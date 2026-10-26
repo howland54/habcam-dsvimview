@@ -12,6 +12,8 @@ VimCameraControl::VimCameraControl(int cameraNumber, QString cameraName, QWidget
    autoMinExposure = 0.0;
    autoMaxExposure = 10.0;
    isColor = false;
+   desiredGain = 0.0;
+   desiredExposure = 0.0;
 
    changeGainSlider = new QSlider();
    changeGainSlider->setOrientation(Qt::Horizontal);
@@ -270,12 +272,15 @@ void VimCameraControl::drawHistogram(QVector<float> RhistToDraw,QVector<float> G
             }
          sum += doubleRHist[index];
       }
-   for(int index = 0; index < RhistToDraw.size(); index++)
+   if(sum > 0.0)
       {
-         doubleRHist[index] = doubleRHist[index]/sum;
-         if(doubleRHist[index] > maxPercentage)
+         for(int index = 0; index < RhistToDraw.size(); index++)
             {
-               maxPercentage = doubleRHist[index];
+               doubleRHist[index] = doubleRHist[index]/sum;
+               if(doubleRHist[index] > maxPercentage)
+                  {
+                     maxPercentage = doubleRHist[index];
+                  }
             }
       }
 
@@ -290,12 +295,15 @@ void VimCameraControl::drawHistogram(QVector<float> RhistToDraw,QVector<float> G
             }
          sum += doubleGHist[index];
       }
-   for(int index = 0; index < GhistToDraw.size(); index++)
+   if(sum > 0.0)
       {
-         doubleGHist[index] = doubleGHist[index]/sum;
-         if(doubleGHist[index] > maxPercentage)
+         for(int index = 0; index < GhistToDraw.size(); index++)
             {
-               maxPercentage = doubleGHist[index];
+               doubleGHist[index] = doubleGHist[index]/sum;
+               if(doubleGHist[index] > maxPercentage)
+                  {
+                     maxPercentage = doubleGHist[index];
+                  }
             }
       }
    sum = 0.0;
@@ -309,12 +317,15 @@ void VimCameraControl::drawHistogram(QVector<float> RhistToDraw,QVector<float> G
             }
          sum += doubleBHist[index];
       }
-   for(int index = 0; index < RhistToDraw.size(); index++)
+   if(sum > 0.0)
       {
-         doubleBHist[index] = doubleBHist[index]/sum;
-         if(doubleBHist[index] > maxPercentage)
+         for(int index = 0; index < BhistToDraw.size(); index++)
             {
-               maxPercentage = doubleBHist[index];
+               doubleBHist[index] = doubleBHist[index]/sum;
+               if(doubleBHist[index] > maxPercentage)
+                  {
+                     maxPercentage = doubleBHist[index];
+                  }
             }
       }
    imageHistogramPlot->graph(0)->setData(greyShades, doubleRHist);

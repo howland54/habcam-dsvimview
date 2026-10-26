@@ -1,6 +1,7 @@
 #ifndef IMAGEACQUISITIONTHREAD_H
 #define IMAGEACQUISITIONTHREAD_H
 #include <string>
+#include <atomic>
 
 #include <poll.h>
 
@@ -26,6 +27,7 @@
 #include "../../habcam-lcmtypes/marine_sensor/marine_sensor/MarineSensorCtd_t.hpp"
 #include "../../habcam-lcmtypes/marine_sensor/marine_sensor/MarineSensorGPS_t.hpp"
 #include "../../habcam-lcmtypes/marine_sensor/marine_sensor/MarineSensorAttitudeSensor_t.hpp"
+#include "../../habcam-lcmtypes/ncd_io/ncd_io/NcdIoState_t.hpp"
 
 
 
@@ -53,6 +55,8 @@ public:
    void                                setSubscriptionName(char *theName);
    void                                setParameterSubscriptionName(char *theName);
    void                                setActive(bool isIt);
+   bool                                getIsActive();
+   void                                requestStop();
 
 private:
 
@@ -65,12 +69,13 @@ private:
    lcm::Subscription                   *ctdSub;
    lcm::Subscription                   *calcDepthSubscription;
    lcm::Subscription                   *gpsSubscription;
+   lcm::Subscription                   *ncdIOSubscription;
 
    int                                 skip;
 
    char                                subscriptionName[64];
 
-   volatile bool                       stopped;
+   std::atomic<bool>                   stopped;
    int                                 fileno;
 
    int                                 whichThread;
@@ -80,6 +85,7 @@ private:
    int                                 xrescaleSize;
    int                                 yrescaleSize;
    bool                                isColor;
+   bool                                isActive;
 
 
 

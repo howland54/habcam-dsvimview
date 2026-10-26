@@ -12,8 +12,6 @@ extern lcm::LCM                            *myLcm;
 extern VimView *theMainWindow;
 extern VimView *sensorPage;
 
-bool isActive;
-
 //long int imageCount;
 
 char mainWindowName[100];
@@ -68,11 +66,16 @@ void marine_sensor_gps_callback(const lcm::ReceiveBuffer *rbuf, const std::strin
 {
   theMainWindow->setGPS(gpsData->latitude, gpsData->longitude);
 }
+void ncd_io_callback(const lcm::ReceiveBuffer *rbuf, const std::string& channel, const ncd_io::NcdIoState_t *ncdData,State *user)
+{
+    theMainWindow->setNCDData(ncdData->relay_state);
+}
 
 
 void parameter_t_callback (const lcm::ReceiveBuffer *rbuf, const std::string& channel,const image::image_parameter_t *imageParameter, State *user)
 {
-   if(!isActive)
+   int camNum = imageParameter->cameraNumber;
+   if(camNum < 0 || camNum >= MAX_N_OF_CAMERAS || !imageProviderThread[camNum] || !imageProviderThread[camNum]->getIsActive())
       {
          return;
       }
@@ -210,6 +213,16 @@ void image_t_callback (const lcm::ReceiveBuffer *rbuf, const std::string& channe
       {
          return;
       }
+
+   if(image->width <= 0 || image->height <= 0 ||
+      image->data.size() < static_cast<size_t>(image->width) * static_cast<size_t>(image->height) * 3)
+      {
+         qWarning() << "image_t_callback: dropping malformed frame on" << channel.c_str()
+                    << "width" << image->width << "height" << image->height
+                    << "data bytes" << (qint64)image->data.size();
+         return;
+      }
+
    imageLock[camNum].lockForWrite();
 
 
@@ -336,6 +349,7 @@ ImageAcquisitionThread::ImageAcquisitionThread(int threadNum,QWidget *parent) : 
    equalize = false;
    stretch = false;
    isColor = false;
+   getHistogram = false;
    isActive = true;
    if(threadNum == 0)
       {
@@ -359,6 +373,11 @@ ImageAcquisitionThread::ImageAcquisitionThread(int threadNum,QWidget *parent) : 
 void ImageAcquisitionThread::setActive(bool isIt)
 {
    isActive = isIt;
+}
+
+bool ImageAcquisitionThread::getIsActive()
+{
+   return isActive;
 }
 
 void ImageAcquisitionThread::setSubscriptionName(char *theName)
@@ -404,6 +423,7 @@ void ImageAcquisitionThread::run()
    attitudeSub = myLcm->subscribeFunction("ATTITUDE", marine_sensor_attitude_callback, &state);
    calcDepthSubscription  = myLcm->subscribeFunction("CALC_DEPTH",&marine_sensor_fathometer_t_callback, &state);
    gpsSubscription  = myLcm->subscribeFunction("GPS",&marine_sensor_gps_callback, &state);
+   ncdIOSubscription = myLcm->subscribeFunction("NCD_IO",&ncd_io_callback, &state);
 
 
    while (!stopped)
@@ -418,7 +438,19 @@ void ImageAcquisitionThread::run()
             }
       }
    myLcm->unsubscribe(imageSub);
+   myLcm->unsubscribe(parameterSub);
+   myLcm->unsubscribe(fathometerSub);
+   myLcm->unsubscribe(altimeterSub);
+   myLcm->unsubscribe(ctdSub);
+   myLcm->unsubscribe(attitudeSub);
+   myLcm->unsubscribe(calcDepthSubscription);
+   myLcm->unsubscribe(gpsSubscription);
 
+}
+
+void ImageAcquisitionThread::requestStop()
+{
+   stopped = true;
 }
 
 void ImageAcquisitionThread::imageSignal()

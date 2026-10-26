@@ -73,6 +73,11 @@ StWinch::StWinch(char	*startup_file_name)
 
     winchInSocketNumber = iniFile.readInt("GENERAL","WINCH_INCOMING_SOCKET",DEFAULT_WINCH_IN_SOCKET);
     flyingHistory = iniFile.readInt("GENERAL","FLYING_HISTORY",DEFAULT_FLYING_HISTORY);
+    if(flyingHistory < 1 || flyingHistory > MAX_FLYING_HISTORY)
+        {
+            qWarning() << "FLYING_HISTORY" << flyingHistory << "out of range, clamping to" << MAX_FLYING_HISTORY;
+            flyingHistory = qBound(1, flyingHistory, MAX_FLYING_HISTORY);
+        }
     depthFilterConstant = iniFile.readDouble("GENERAL", "DEPTH_FILTER_CONSTANT",DEFAULT_DEPTH_FILTER_CONSTANT);
     fathometerFilterConstant = iniFile.readDouble("GENERAL", "FATHOMETER_FILTER_CONSTANT",DEFAULT_FATHOMETER_FILTER_CONSTANT);
 
@@ -84,9 +89,6 @@ StWinch::StWinch(char	*startup_file_name)
     connect (winchSocket, SIGNAL(readyRead()),this,SLOT(sledSocketDataPending()));
 
     iniFile.closeIni();
-
-    flyingPlotTimer	= new QTimer(this);
-    connect(flyingPlotTimer,SIGNAL(timeout()),this,SLOT(oneHertzUpdate()));
 
     yAxisMinEdit = new QLineEdit;
     yAxisMinEdit->setValidator(new QDoubleValidator(-500.0, 500.0, 1, this));
