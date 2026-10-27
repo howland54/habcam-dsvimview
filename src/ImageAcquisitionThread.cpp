@@ -68,7 +68,7 @@ void marine_sensor_gps_callback(const lcm::ReceiveBuffer *rbuf, const std::strin
 }
 void ncd_io_callback(const lcm::ReceiveBuffer *rbuf, const std::string& channel, const ncd_io::NcdIoState_t *ncdData,State *user)
 {
-    theMainWindow->setNCDData(ncdData->relay_state, sizeof(ncdData->relay_state));
+    theMainWindow->setNCDData(ncdData);
 }
 
 

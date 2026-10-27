@@ -2,6 +2,8 @@
 #define CONTROLBUTTON_H
 
 #include <QtWidgets>
+#include "qledindicator.h"
+
 
 class PowerButton : public QWidget
 {
@@ -25,6 +27,8 @@ private:
    QLabel       *buttonLabel;
    QLabel       *buttonState;
    int          myNumber;
+   int8_t       lastState;
+   QLedIndicator    *powerLED;
 
 
 signals:
