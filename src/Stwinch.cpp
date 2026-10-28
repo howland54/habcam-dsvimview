@@ -355,6 +355,8 @@ void StWinch::setAltitude(double theAltitude)
            altitudeIndicator->setOffColor1(Qt::green);
            altitudeIndicator->setOffColor2(Qt::green);
        }
+   // setOffColor only stores the colour; redraw so the warning shows now
+   altitudeIndicator->repaint();
 
 }
 void	StWinch::changeAltBounds(double theBound)
@@ -485,6 +487,8 @@ void StWinch::sledSocketDataPending()
                             altitudeIndicator->setOffColor1(Qt::green);
                             altitudeIndicator->setOffColor2(Qt::green);
                         }
+                    // setOffColor only stores the colour; redraw so the warning shows now
+                    altitudeIndicator->repaint();
 
                 }
 
