@@ -12,6 +12,7 @@
 #include "cameradefines.h"
 #include "Stwinch.h"
 #include "PowerControlWidget.h"
+#include "LcmThread.h"
 #include "../../habcam-lcmtypes/ncd_io/ncd_io/NcdIoState_t.hpp"
 
 
@@ -90,6 +91,7 @@ private:
    switchType               switches[MAX_NUMBER_OF_SWITCHES];
    int                      numberOfSwitches;
    PowerControlWidget       *powerControlWidget;
+   LcmThread                *lcmThread;
 
 
 public slots:

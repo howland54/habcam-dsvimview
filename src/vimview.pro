@@ -46,6 +46,7 @@ SOURCES += main.cpp\
     SystemParameterControl.cpp \
         VimView.cpp \
     ImageAcquisitionThread.cpp \
+    LcmThread.cpp \
     VimCameraControl.cpp \
     qcustomplot.cpp \
     RepetitionControlWidget.cpp \
@@ -54,6 +55,7 @@ SOURCES += main.cpp\
 
 HEADERS  += VimView.h \
     ImageAcquisitionThread.h \
+    LcmThread.h \
     PowerButton.h \
     PowerControlWidget.h \
     SensorPage.h \

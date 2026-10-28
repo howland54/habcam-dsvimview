@@ -1,6 +1,7 @@
 #include "VimView.h"
 #include "../../dsvimlib/include/IniFile.h"
 #include "ImageAcquisitionThread.h"
+#include "LcmThread.h"
 
 /* 26 Jan 2024 jch attempted to change all references to 16bit collection to 8 bit, tried to reflect change to sparton vice microstrain (just a label) */
 
@@ -27,6 +28,7 @@ VimView::VimView(char	*startup_file_name)
    globalImageSkipValue = 1;
    numberOfSwitches = 0;
    powerControlWidget = nullptr;
+   lcmThread = nullptr;
    // NCD, sensor and status data arrive on the LCM thread; queue them over to the GUI thread
    connect(this, SIGNAL(ncdDataReceived(QByteArray,bool,int)), this, SLOT(updateNCDData(QByteArray,bool,int)), Qt::QueuedConnection);
    connect(this, SIGNAL(altitudeReceived(double)), this, SLOT(updateAltitude(double)), Qt::QueuedConnection);
@@ -198,14 +200,19 @@ VimView::VimView(char	*startup_file_name)
          free(subscriptionNames[thisCamera]);
          qRegisterMetaType < QVector<float> >("QVector<float>");
 
-         // connect before subscribing: thread 0 may already be dispatching, and a frame must not signal into nothing
+         // connect before subscribing so a frame can never signal into nothing
          connect(imageProviderThread[thisCamera],SIGNAL(imUpdate(int)),this,SLOT(updateImage(int)));
          connect(imageProviderThread[thisCamera],SIGNAL(newHistogram(QVector<float>,QVector<float>,QVector<float>)),vimCameraControl[thisCamera],SLOT(drawHistogram(QVector<float>,QVector<float>,QVector<float>)));
 
          imageProviderThread[thisCamera]->subscribe();
-         imageProviderThread[thisCamera]->start();
 
       }
+   // one thread handles LCM for everything, including the cameras' images; it runs even with no cameras.
+   // All subscribing is done here on the GUI thread before it starts.
+   lcmThread = new LcmThread();
+   lcmThread->subscribe();
+   lcmThread->start();
+
    currentTimeLabel = new QLabel("current time: ");
    masterLayout->addLayout(imagePairLayout);
    masterLayout->addWidget(systemParameterControl);
@@ -677,13 +684,12 @@ void    VimView::powerButtonClicked(int whichButton, int theState)
 }
 void VimView::shutDown()
 {
-   for(int thisCamera = 0; thisCamera < nOfCameras; thisCamera++)
+   if(lcmThread)
       {
-         imageProviderThread[thisCamera]->requestStop();
-      }
-   for(int thisCamera = 0; thisCamera < nOfCameras; thisCamera++)
-      {
-         imageProviderThread[thisCamera]->wait();
+         lcmThread->requestStop();
+         lcmThread->wait();
+         // nothing is inside handleTimeout now, so it is safe to unsubscribe
+         lcmThread->unsubscribeAll();
       }
    for(int thisCamera = 0; thisCamera < nOfCameras; thisCamera++)
       {

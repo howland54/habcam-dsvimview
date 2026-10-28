@@ -55,26 +55,14 @@ public:
    void                                setParameterSubscriptionName(char *theName);
    void                                setActive(bool isIt);
    bool                                getIsActive();
-   void                                requestStop();
 
 private:
 
    lcm::Subscription                   *imageSub;
-   lcm::Subscription                   *parameterSub;
-
-   lcm::Subscription                   *attitudeSub;
-   lcm::Subscription                   *fathometerSub;
-   lcm::Subscription                   *altimeterSub;
-   lcm::Subscription                   *ctdSub;
-   lcm::Subscription                   *calcDepthSubscription;
-   lcm::Subscription                   *gpsSubscription;
-   lcm::Subscription                   *ncdIOSubscription;
 
    int                                 skip;
 
    char                                subscriptionName[64];
-
-   std::atomic<bool>                   stopped;
 
    int                                 whichThread;
    bool                                equalize;
@@ -85,10 +73,6 @@ private:
    bool                                isActive;
 
 
-
-
-protected:
-    void    run();
 
 
 signals:
