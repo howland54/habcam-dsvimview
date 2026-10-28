@@ -53,6 +53,8 @@ public:
    bool                                getisColor();
    void                                setColor(bool isIt);
    void                                setSubscriptionName(char *theName);
+   void                                subscribe();
+   void                                unsubscribeAll();
    void                                setParameterSubscriptionName(char *theName);
    void                                setActive(bool isIt);
    bool                                getIsActive();

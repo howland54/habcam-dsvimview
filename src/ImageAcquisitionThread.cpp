@@ -28,6 +28,9 @@ public:
    int usefulVariable;
 };
 
+// handed to every subscription as its user pointer, so it has to outlive them all
+static State lcmState;
+
 void marine_sensor_altimeter_t_callback0(const lcm::ReceiveBuffer *rbuf, const std::string& channel,
                                   const marine_sensor::marineSensorAltimeter_t *altimeterData, State *user)
 {
@@ -74,8 +77,10 @@ void ncd_io_callback(const lcm::ReceiveBuffer *rbuf, const std::string& channel,
 
 void parameter_t_callback (const lcm::ReceiveBuffer *rbuf, const std::string& channel,const image::image_parameter_t *imageParameter, State *user)
 {
+   // LOGGING, RECORDING and WRITE_STATUS are system wide; only the per-camera keys need a valid camera
    int camNum = imageParameter->cameraNumber;
-   if(camNum < 0 || camNum >= MAX_N_OF_CAMERAS || !imageProviderThread[camNum] || !imageProviderThread[camNum]->getIsActive())
+   bool isCameraKey = ("EXPOSURE" == imageParameter->key || "GAIN" == imageParameter->key || "TRIGGER_SOURCE" == imageParameter->key);
+   if(isCameraKey && (camNum < 0 || camNum >= MAX_N_OF_CAMERAS || !imageProviderThread[camNum] || !imageProviderThread[camNum]->getIsActive()))
       {
          return;
       }
@@ -214,19 +219,54 @@ void image_t_callback (const lcm::ReceiveBuffer *rbuf, const std::string& channe
          return;
       }
 
-   if(image->width <= 0 || image->height <= 0 ||
-      image->data.size() < static_cast<size_t>(image->width) * static_cast<size_t>(image->height) * 3)
+   int channels = 0;
+   if(image->pixelformat == image::image_t::PIXEL_FORMAT_BGR)
       {
-         qWarning() << "image_t_callback: dropping malformed frame on" << channel.c_str()
-                    << "width" << image->width << "height" << image->height
-                    << "data bytes" << (qint64)image->data.size();
+         channels = 3;
+      }
+   else if(image->pixelformat == image::image_t::PIXEL_FORMAT_GRAY)
+      {
+         channels = 1;
+      }
+   // use row_stride only if the publisher filled it in sensibly, otherwise assume packed rows
+   size_t packedStride = static_cast<size_t>(image->width) * channels;
+   size_t stride = packedStride;
+   if(image->row_stride > 0 && static_cast<size_t>(image->row_stride) > packedStride &&
+      image->data.size() >= static_cast<size_t>(image->row_stride) * static_cast<size_t>(image->height))
+      {
+         stride = image->row_stride;
+      }
+   if(!channels || image->width <= 0 || image->height <= 0 ||
+      image->data.size() < stride * static_cast<size_t>(image->height))
+      {
+         // don't flood the log when every frame on a channel is bad
+         static int droppedFrames = 0;
+         if(0 == droppedFrames++ % 100)
+            {
+               qWarning() << "image_t_callback: dropping frame on" << channel.c_str()
+                          << "pixelformat" << image->pixelformat
+                          << "width" << image->width << "height" << image->height
+                          << "row_stride" << image->row_stride
+                          << "data bytes" << (qint64)image->data.size()
+                          << "(" << droppedFrames << "dropped so far)";
+            }
          return;
       }
 
    imageLock[camNum].lockForWrite();
 
 
-   cv::Mat    colorImage = cv::Mat(image->height, image->width, CV_8UC3, (void *)image->data.data());
+   cv::Mat    colorImage;
+   if(3 == channels)
+      {
+         colorImage = cv::Mat(image->height, image->width, CV_8UC3, (void *)image->data.data(), stride);
+      }
+   else
+      {
+         // the processing below expects BGR, so expand gray frames to 3 channels
+         cv::Mat grayImage(image->height, image->width, CV_8UC1, (void *)image->data.data(), stride);
+         cv::cvtColor(grayImage, colorImage, cv::COLOR_GRAY2BGR);
+      }
    //cv::Mat    colorImage(image->width, image->height, CV_16UC3);
    //cvImage = cv::Mat(image->height, image->width, CV_8U, (void *)image->data.data(),image->row_stride);
    //cv::Mat colorImage(image->width, image->height, CV_8UC3);
@@ -351,6 +391,15 @@ ImageAcquisitionThread::ImageAcquisitionThread(int threadNum,QWidget *parent) : 
    isColor = false;
    getHistogram = false;
    isActive = true;
+   imageSub = nullptr;
+   parameterSub = nullptr;
+   fathometerSub = nullptr;
+   altimeterSub = nullptr;
+   ctdSub = nullptr;
+   attitudeSub = nullptr;
+   calcDepthSubscription = nullptr;
+   gpsSubscription = nullptr;
+   ncdIOSubscription = nullptr;
    if(threadNum == 0)
       {
          leftSkip = 0;
@@ -408,44 +457,76 @@ void ImageAcquisitionThread::setRescaleSize(int xSize, int ySize)
    xrescaleSize = xSize;
    yrescaleSize = ySize;
 }
+// call from the GUI thread before any thread is started: lcm::LCM keeps its subscriptions in an
+// unlocked vector, so subscribing from several threads at once can corrupt it
+void ImageAcquisitionThread::subscribe()
+{
+   lcmState.usefulVariable = 1;
+
+   imageSub = myLcm->subscribeFunction( subscriptionName, &image_t_callback, &lcmState);
+
+   // every camera thread shares myLcm. LCM must only be handled from one thread, and the shared
+   // channels must only be subscribed once, so thread 0 does both and dispatches every camera's images
+   if(whichThread != 0)
+      {
+         return;
+      }
+
+   parameterSub = myLcm->subscribeFunction("M_STATUS_PARAMETERS",&parameter_t_callback, &lcmState);
+   fathometerSub = myLcm->subscribeFunction("FATHOMETER",&marine_sensor_fathometer_t_callback, &lcmState);
+   altimeterSub = myLcm->subscribeFunction("ALTIMETER",&marine_sensor_altimeter_t_callback0, &lcmState);
+   ctdSub = myLcm->subscribeFunction("CTD",&marine_sensor_ctd_t_callback, &lcmState);
+   attitudeSub = myLcm->subscribeFunction("ATTITUDE", marine_sensor_attitude_callback, &lcmState);
+   calcDepthSubscription  = myLcm->subscribeFunction("CALC_DEPTH",&marine_sensor_fathometer_t_callback, &lcmState);
+   gpsSubscription  = myLcm->subscribeFunction("GPS",&marine_sensor_gps_callback, &lcmState);
+   ncdIOSubscription = myLcm->subscribeFunction("NCD_IO",&ncd_io_callback, &lcmState);
+}
+
 void ImageAcquisitionThread::run()
 {
-   State state;
-   state.usefulVariable = 1;
+   // only thread 0 handles LCM, see subscribe()
+   if(whichThread != 0)
+      {
+         return;
+      }
 
    usleep(2000);
 
-   imageSub = myLcm->subscribeFunction( subscriptionName, &image_t_callback, &state);
-   parameterSub = myLcm->subscribeFunction("M_STATUS_PARAMETERS",&parameter_t_callback, &state);
-   fathometerSub = myLcm->subscribeFunction("FATHOMETER",&marine_sensor_fathometer_t_callback, &state);
-   altimeterSub = myLcm->subscribeFunction("ALTIMETER",&marine_sensor_altimeter_t_callback0, &state);
-   ctdSub = myLcm->subscribeFunction("CTD",&marine_sensor_ctd_t_callback, &state);
-   attitudeSub = myLcm->subscribeFunction("ATTITUDE", marine_sensor_attitude_callback, &state);
-   calcDepthSubscription  = myLcm->subscribeFunction("CALC_DEPTH",&marine_sensor_fathometer_t_callback, &state);
-   gpsSubscription  = myLcm->subscribeFunction("GPS",&marine_sensor_gps_callback, &state);
-   ncdIOSubscription = myLcm->subscribeFunction("NCD_IO",&ncd_io_callback, &state);
-
-
+   bool lcmFailing = false;
+   // handleTimeout returns after 50 ms with no traffic, so the stop request is always seen
    while (!stopped)
       {
-         pollfd theFds;
-         theFds.events = POLLIN;
-         theFds.fd = fileno;
-         poll(&theFds,1,50);
-         if(theFds.revents == POLLIN)
+         if(myLcm->handleTimeout(50) < 0)
             {
-               myLcm->handle();
+               // an LCM error returns at once; back off so the loop doesn't spin, and only log the change
+               if(!lcmFailing)
+                  {
+                     qWarning() << "ImageAcquisitionThread: LCM handleTimeout failed, retrying";
+                     lcmFailing = true;
+                  }
+               usleep(50000);
+            }
+         else if(lcmFailing)
+            {
+               qWarning() << "ImageAcquisitionThread: LCM handling recovered";
+               lcmFailing = false;
             }
       }
-   myLcm->unsubscribe(imageSub);
-   myLcm->unsubscribe(parameterSub);
-   myLcm->unsubscribe(fathometerSub);
-   myLcm->unsubscribe(altimeterSub);
-   myLcm->unsubscribe(ctdSub);
-   myLcm->unsubscribe(attitudeSub);
-   myLcm->unsubscribe(calcDepthSubscription);
-   myLcm->unsubscribe(gpsSubscription);
+}
 
+// call only after thread 0 has stopped, so nothing is inside handleTimeout
+void ImageAcquisitionThread::unsubscribeAll()
+{
+   lcm::Subscription *subscriptions[] = {imageSub, parameterSub, fathometerSub, altimeterSub, ctdSub,
+                                         attitudeSub, calcDepthSubscription, gpsSubscription, ncdIOSubscription};
+   for(lcm::Subscription *thisSubscription : subscriptions)
+      {
+         // only thread 0 subscribes the shared channels
+         if(thisSubscription)
+            {
+               myLcm->unsubscribe(thisSubscription);
+            }
+      }
 }
 
 void ImageAcquisitionThread::requestStop()

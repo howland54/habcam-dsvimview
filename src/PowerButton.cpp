@@ -49,9 +49,7 @@ void PowerButton::setButtonState(int theState)
         {
             buttonState->setText("on");
             lastState = 1;
-            powerLED->setOffColor1(Qt::green);
-            powerLED->setOffColor2(Qt::green);
-            powerLED->repaint();
+            setLedColor(powerLED, Qt::green);
         }
     }
     else
@@ -60,9 +58,7 @@ void PowerButton::setButtonState(int theState)
         {
             buttonState->setText("off");
             lastState = 0;
-            powerLED->setOffColor1(QColor(0,28,0));
-            powerLED->setOffColor2(QColor(0,128,0));
-            powerLED->repaint();
+            resetLedColor(powerLED);
         }
 
     }

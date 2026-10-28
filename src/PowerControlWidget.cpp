@@ -4,7 +4,6 @@ PowerControlWidget::PowerControlWidget(QWidget *parent) : QWidget(parent)
 {
     powerControlGroupBox = new QGroupBox("power control");
     numberOfRelays = 0;
-    myParent = parent;
     errorLED = new QLedIndicator(this);
     checksumLED = new QLedIndicator(this);
     errorLabel = new QLabel("Timeout Error: ");
@@ -17,13 +16,18 @@ PowerControlWidget::PowerControlWidget(QWidget *parent) : QWidget(parent)
 
 }
 
-void PowerControlWidget::addAButton(switchType theSwitch, QWidget *myParent)
+void PowerControlWidget::addAButton(switchType theSwitch)
 {
-
+    if(numberOfRelays >= MAX_NUMBER_OF_SWITCHES)
+    {
+        qWarning() << "PowerControlWidget: no room for relay" << theSwitch.relayNumber << theSwitch.attachedTo;
+        return;
+    }
     powerButton[numberOfRelays] = new PowerButton();
-    connect(powerButton[numberOfRelays],SIGNAL(powerButtonClicked(int,int)),myParent ,SLOT(powerButtonClicked(int,int)));
+    // pass the clicks on, the owner connects to our powerButtonClicked
+    connect(powerButton[numberOfRelays],SIGNAL(powerButtonClicked(int,int)),this ,SIGNAL(powerButtonClicked(int,int)));
     powerButton[numberOfRelays]->setButtonLabel(theSwitch.attachedTo);
-    powerButton[numberOfRelays]->setButtonNumber(numberOfRelays);
+    powerButton[numberOfRelays]->setButtonNumber(theSwitch.relayNumber);
     relayNumber[numberOfRelays] = theSwitch.relayNumber;
     numberOfRelays++;
 }
@@ -59,9 +63,7 @@ void  PowerControlWidget::setErrorStates(bool  checksumError, int errorCode)
     if(checksumError)
     {
         if(!checksumErrorSet){
-            checksumLED->setOffColor1(Qt::red);
-            checksumLED->setOffColor2(Qt::red);
-            checksumLED->repaint();
+            setLedColor(checksumLED, Qt::red);
             checksumErrorSet = true;
         }
     }
@@ -69,22 +71,15 @@ void  PowerControlWidget::setErrorStates(bool  checksumError, int errorCode)
     {
         if(!timeoutErrorSet)
         {
-            errorLED->setOffColor1(Qt::red);
-            errorLED->setOffColor2(Qt::red);
-            errorLED->repaint();
+            setLedColor(errorLED, Qt::red);
             timeoutErrorSet = true;
         }
     }
 }
 void PowerControlWidget::clearErrorsButtonClicked()
 {
-    checksumLED->setOffColor1(QColor(0,28,0));
-    checksumLED->setOffColor2(QColor(0,128,0));
-    checksumLED->repaint();
-
-    errorLED->setOffColor1(QColor(0,28,0));
-    errorLED->setOffColor2(QColor(0,128,0));
-    errorLED->repaint();
+    resetLedColor(checksumLED);
+    resetLedColor(errorLED);
 
 
     checksumErrorSet = false;

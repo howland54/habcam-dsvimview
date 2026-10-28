@@ -12,8 +12,6 @@
 
 typedef struct
 {
-    bool    desiredState;
-    bool    actualState;
     char    *attachedTo;
     int     relayNumber;
 }switchType;
@@ -24,7 +22,7 @@ class PowerControlWidget : public QWidget
     Q_OBJECT
 public:
     explicit PowerControlWidget(QWidget *parent = nullptr);
-    void     addAButton(switchType theSwitch, QWidget *myParent);
+    void     addAButton(switchType theSwitch);
     void     drawLayout();
     void     setRelayStates(const int8_t *theRelayStates);
     void     setErrorStates(bool  checksumError, int errorCode);
@@ -34,7 +32,6 @@ private:
     PowerButton    *powerButton[MAX_NUMBER_OF_SWITCHES];
     int            relayNumber[MAX_NUMBER_OF_SWITCHES];
     int            numberOfRelays;
-    QWidget        *myParent;
     QPushButton     *clearErrorsButton;
     QLedIndicator   *errorLED;
     QLedIndicator   *checksumLED;
@@ -47,7 +44,7 @@ private slots:
     void            clearErrorsButtonClicked();
 
 signals:
-
+    void            powerButtonClicked(int whichRelay, int theState);
 
 };
 

@@ -58,10 +58,12 @@ VimView::VimView(char	*startup_file_name)
             char *candidateSwitchName = iniFile.readString("NCD_IO",switchLabel, "NO_SWITCH");
             if(!strcmp(candidateSwitchName,"NO_SWITCH"))
                 {
+                    free(candidateSwitchName);
                     continue;
                 }
-            switches[switchNumber].attachedTo = strdup(candidateSwitchName);
-            switches[switchNumber].relayNumber = switchNumber;
+            // readString returns a strdup'ed string, so just take ownership of it
+            switches[numberOfSwitches].attachedTo = candidateSwitchName;
+            switches[numberOfSwitches].relayNumber = switchNumber;
             numberOfSwitches++;
          }
 
@@ -143,8 +145,12 @@ VimView::VimView(char	*startup_file_name)
    powerControlWidget = new PowerControlWidget (this);
    for(int relayNumber = 0; relayNumber < numberOfSwitches; relayNumber++)
     {
-        powerControlWidget->addAButton(switches[relayNumber], this) ;
+        powerControlWidget->addAButton(switches[relayNumber]) ;
+        // the button keeps its own copy of the name
+        free(switches[relayNumber].attachedTo);
+        switches[relayNumber].attachedTo = nullptr;
     }
+   connect(powerControlWidget, SIGNAL(powerButtonClicked(int,int)), this, SLOT(powerButtonClicked(int,int)));
    powerControlWidget->drawLayout();
    iniFile.closeIni();
    QVBoxLayout *masterLayout = new QVBoxLayout(this);
@@ -182,6 +188,7 @@ VimView::VimView(char	*startup_file_name)
                imageProviderThread[thisCamera]->setSubscriptionName(theSubscriptionName);
             }
          free(subscriptionNames[thisCamera]);
+         imageProviderThread[thisCamera]->subscribe();
          imageProviderThread[thisCamera]->start();
 
          qRegisterMetaType < QVector<float> >("QVector<float>");
@@ -600,6 +607,10 @@ void VimView::shutDown()
    for(int thisCamera = 0; thisCamera < nOfCameras; thisCamera++)
       {
          imageProviderThread[thisCamera]->wait();
+      }
+   for(int thisCamera = 0; thisCamera < nOfCameras; thisCamera++)
+      {
+         imageProviderThread[thisCamera]->unsubscribeAll();
       }
 
    stWinch->close();
