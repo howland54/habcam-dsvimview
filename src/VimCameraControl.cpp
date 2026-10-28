@@ -11,7 +11,6 @@ VimCameraControl::VimCameraControl(int cameraNumber, QString cameraName, QWidget
    autoMaxGain = 40.0;  //set for Manta 319
    autoMinExposure = 0.0;
    autoMaxExposure = 10.0;
-   isColor = false;
    desiredGain = 0.0;
    desiredExposure = 0.0;
 
@@ -218,15 +217,6 @@ void VimCameraControl::autoGainValueChanged(double theValue)
       }
 }
 
-bool VimCameraControl::getIsColor()
-{
-   return isColor;
-}
-
-void VimCameraControl::setIsColor(bool isIt)
-{
-   isColor = isIt;
-}
 void VimCameraControl::autoExposureValueChanged(double theValue)
 {
    QDoubleSpinBox *theSendingSpinBox = (QDoubleSpinBox *)sender(  );

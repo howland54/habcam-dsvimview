@@ -102,12 +102,10 @@ VimView::VimView(char	*startup_file_name)
                      subscriptionNames[nOfCameras] = channelName;
                      vimCameraControl[nOfCameras] = new VimCameraControl(nOfCameras,(QString)thisSN, this);
                      free(thisSN);
-                     int isColor = iniFile.readInt(cameraLabel,"IS_COLOR", 0);
                      int xSize = iniFile.readInt(cameraLabel,"X_DISPLAY_SIZE", 612);
                      systemParameterSize = xSize;
                      int ySize = iniFile.readInt(cameraLabel,"Y_DISPLAY_SIZE", 512);
                      setDisplaySize(nOfCameras,xSize,ySize);
-                     vimCameraControl[nOfCameras]->setIsColor((bool)isColor);
                      connect(vimCameraControl[nOfCameras],SIGNAL(changeAutoExposure(bool,double, double, int)), this, SLOT(changeAutoExposure(bool,double, double, int)));
                      connect(vimCameraControl[nOfCameras],SIGNAL(changeExposureValue(double,int)), this, SLOT(changeExposureValue(double,int)));
                      connect(vimCameraControl[nOfCameras],SIGNAL(sendAutoGain(bool,double, double, int)), this, SLOT(changeAutoGain(bool,double, double, int)));
@@ -168,7 +166,6 @@ VimView::VimView(char	*startup_file_name)
          qDebug() << "starting image acquisition thread...";
          imageProviderThread[thisCamera] = new ImageAcquisitionThread(thisCamera,this);
          imageProviderThread[thisCamera]->setRescaleSize(imageDisplayWidth[thisCamera],imageDisplayHeight[thisCamera]);
-         imageProviderThread[thisCamera]->setColor(vimCameraControl[thisCamera]->getIsColor());
          if(strncmp(subscriptionNames[thisCamera],"NONAME",6))
             {
                imageProviderThread[thisCamera]->setSubscriptionName(subscriptionNames[thisCamera]);
@@ -188,13 +185,14 @@ VimView::VimView(char	*startup_file_name)
                imageProviderThread[thisCamera]->setSubscriptionName(theSubscriptionName);
             }
          free(subscriptionNames[thisCamera]);
-         imageProviderThread[thisCamera]->subscribe();
-         imageProviderThread[thisCamera]->start();
-
          qRegisterMetaType < QVector<float> >("QVector<float>");
 
+         // connect before subscribing: thread 0 may already be dispatching, and a frame must not signal into nothing
          connect(imageProviderThread[thisCamera],SIGNAL(imUpdate(int)),this,SLOT(updateImage(int)));
          connect(imageProviderThread[thisCamera],SIGNAL(newHistogram(QVector<float>,QVector<float>,QVector<float>)),vimCameraControl[thisCamera],SLOT(drawHistogram(QVector<float>,QVector<float>,QVector<float>)));
+
+         imageProviderThread[thisCamera]->subscribe();
+         imageProviderThread[thisCamera]->start();
 
       }
    currentTimeLabel = new QLabel("current time: ");
@@ -564,16 +562,18 @@ void    VimView::updateImage(int theImage)
 {
    //imageArea[0]->setPixmap(QPixmap::fromImage(QImage(displayImage[0].data, displayImage[0].cols, displayImage[0].rows, displayImage[0].step, QImage::Format_RGB888)));
    lastImageDateTime = QDateTime::currentDateTimeUtc();
-   if(vimCameraControl[theImage]->getIsColor())
-      {
-         imageArea[theImage]->setPixmap(QPixmap::fromImage(QImage(displayImage[theImage].data, displayImage[theImage].cols, displayImage[theImage].rows, displayImage[theImage].step, QImage::Format_BGR888)));
-      }
-
-   else
-      {
-         imageArea[theImage]->setPixmap(QPixmap::fromImage(QImage(displayImage[theImage].data, displayImage[theImage].cols, displayImage[theImage].rows, displayImage[theImage].step, QImage::Format_Grayscale8)));
-      };
+   // take our own reference to the frame; the callback swaps in new frames rather than writing into this one
+   imageLock[theImage].lockForRead();
+   cv::Mat frame = displayImage[theImage];
    imageLock[theImage].unlock();
+
+   if(frame.empty())
+      {
+         return;
+      }
+   // the app only handles colour imagery; displayImage is always BGR (IS_COLOR in the ini is ignored)
+   // fromImage copies the pixels, so frame can go once this returns
+   imageArea[theImage]->setPixmap(QPixmap::fromImage(QImage(frame.data, frame.cols, frame.rows, frame.step, QImage::Format_BGR888)));
 }
 
 void VimView::setSkipValue(int theValue)

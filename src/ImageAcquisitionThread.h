@@ -3,7 +3,6 @@
 #include <string>
 #include <atomic>
 
-#include <poll.h>
 
 #include <QThread>
 #include <QDebug>
@@ -50,8 +49,6 @@ public:
    void                                histogramSignal(QVector<float> theRHist,QVector<float> theGHist,QVector<float> thBHist);
    void                                setRescaleSize(int xSize, int ySize);
    cv::Size                            getDestSize();
-   bool                                getisColor();
-   void                                setColor(bool isIt);
    void                                setSubscriptionName(char *theName);
    void                                subscribe();
    void                                unsubscribeAll();
@@ -78,7 +75,6 @@ private:
    char                                subscriptionName[64];
 
    std::atomic<bool>                   stopped;
-   int                                 fileno;
 
    int                                 whichThread;
    bool                                equalize;
@@ -86,7 +82,6 @@ private:
    bool                                getHistogram;
    int                                 xrescaleSize;
    int                                 yrescaleSize;
-   bool                                isColor;
    bool                                isActive;
 
 

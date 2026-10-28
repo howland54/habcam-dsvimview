@@ -13,8 +13,6 @@ public:
    VimCameraControl(int cameraNumber, QString cameraName, QWidget *parent);
    void                    setExposureActual(double theExposure);
    void                    setGainActual(double theExposure);
-   void                    setIsColor(bool isIt);
-   bool                    getIsColor();
    void                    setTriggerSource(int theSource);
 
 private:
@@ -57,7 +55,6 @@ private:
 
 
    QVector<double>         greyShades;
-   bool                    isColor;
 
 
 

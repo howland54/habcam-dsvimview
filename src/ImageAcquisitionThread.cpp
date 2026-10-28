@@ -75,6 +75,22 @@ void ncd_io_callback(const lcm::ReceiveBuffer *rbuf, const std::string& channel,
 }
 
 
+// std::stod throws on bad input, and an exception escaping an LCM callback ends the program
+static bool parseParameterValue(const image::image_parameter_t *imageParameter, double &value)
+{
+   const char *text = imageParameter->value.c_str();
+   char *end;
+   errno = 0;
+   value = strtod(text, &end);
+   if(end == text || *end != '\0' || errno == ERANGE)
+      {
+         qWarning() << "parameter_t_callback: bad value" << imageParameter->value.c_str()
+                    << "for" << imageParameter->key.c_str();
+         return false;
+      }
+   return true;
+}
+
 void parameter_t_callback (const lcm::ReceiveBuffer *rbuf, const std::string& channel,const image::image_parameter_t *imageParameter, State *user)
 {
    // LOGGING, RECORDING and WRITE_STATUS are system wide; only the per-camera keys need a valid camera
@@ -86,13 +102,21 @@ void parameter_t_callback (const lcm::ReceiveBuffer *rbuf, const std::string& ch
       }
    if("EXPOSURE" == imageParameter->key)
       {
-         double value = std::stod(imageParameter->value);
+         double value;
+         if(!parseParameterValue(imageParameter, value))
+            {
+               return;
+            }
          value = value/1000.0;
          theMainWindow->setExposureActual(value, imageParameter->cameraNumber);
       }
    else if("LOGGING" == imageParameter->key)
       {
-         double value = std::stod(imageParameter->value);
+         double value;
+         if(!parseParameterValue(imageParameter, value))
+            {
+               return;
+            }
          if(value < 0)
             {
                theMainWindow->setWriteSuccess(false);
@@ -115,7 +139,11 @@ void parameter_t_callback (const lcm::ReceiveBuffer *rbuf, const std::string& ch
       }
    else if("GAIN" == imageParameter->key)
       {
-         double value = std::stod(imageParameter->value);
+         double value;
+         if(!parseParameterValue(imageParameter, value))
+            {
+               return;
+            }
          theMainWindow->setGainActual(value, imageParameter->cameraNumber);
       }
    else if("RECORDING" == imageParameter->key)
@@ -219,54 +247,41 @@ void image_t_callback (const lcm::ReceiveBuffer *rbuf, const std::string& channe
          return;
       }
 
-   int channels = 0;
-   if(image->pixelformat == image::image_t::PIXEL_FORMAT_BGR)
-      {
-         channels = 3;
-      }
-   else if(image->pixelformat == image::image_t::PIXEL_FORMAT_GRAY)
-      {
-         channels = 1;
-      }
-   // use row_stride only if the publisher filled it in sensibly, otherwise assume packed rows
-   size_t packedStride = static_cast<size_t>(image->width) * channels;
+   // the app only handles colour imagery, so anything but BGR is dropped
+   bool isBGR = (image->pixelformat == image::image_t::PIXEL_FORMAT_BGR);
+   // dsvimc doesn't set row_stride, so it can hold garbage. Use it only when it is padded and
+   // consistent with the buffer, otherwise assume packed rows. A padded buffer needs the padding
+   // between rows but not after the last one.
+   size_t packedStride = static_cast<size_t>(image->width) * 3;
    size_t stride = packedStride;
-   if(image->row_stride > 0 && static_cast<size_t>(image->row_stride) > packedStride &&
-      image->data.size() >= static_cast<size_t>(image->row_stride) * static_cast<size_t>(image->height))
+   if(image->width > 0 && image->height > 0 && image->row_stride > 0 &&
+      static_cast<size_t>(image->row_stride) > packedStride &&
+      image->data.size() >= static_cast<size_t>(image->row_stride) * static_cast<size_t>(image->height - 1) + packedStride)
       {
          stride = image->row_stride;
       }
-   if(!channels || image->width <= 0 || image->height <= 0 ||
-      image->data.size() < stride * static_cast<size_t>(image->height))
+   if(!isBGR || image->width <= 0 || image->height <= 0 ||
+      image->data.size() < stride * static_cast<size_t>(image->height - 1) + packedStride)
       {
-         // don't flood the log when every frame on a channel is bad
-         static int droppedFrames = 0;
-         if(0 == droppedFrames++ % 100)
+         // don't flood the log when every frame on a channel is bad; counted per camera
+         static int droppedFrames[MAX_N_OF_CAMERAS] = {0};
+         if(0 == droppedFrames[camNum]++ % 100)
             {
                qWarning() << "image_t_callback: dropping frame on" << channel.c_str()
                           << "pixelformat" << image->pixelformat
                           << "width" << image->width << "height" << image->height
                           << "row_stride" << image->row_stride
                           << "data bytes" << (qint64)image->data.size()
-                          << "(" << droppedFrames << "dropped so far)";
+                          << "(" << droppedFrames[camNum] << "dropped so far)";
             }
          return;
       }
 
-   imageLock[camNum].lockForWrite();
+   // processed into a fresh Mat every frame and swapped into displayImage at the end, so the GUI
+   // never sees a frame being overwritten and the lock is only held for the swap
+   cv::Mat    processedImage;
 
-
-   cv::Mat    colorImage;
-   if(3 == channels)
-      {
-         colorImage = cv::Mat(image->height, image->width, CV_8UC3, (void *)image->data.data(), stride);
-      }
-   else
-      {
-         // the processing below expects BGR, so expand gray frames to 3 channels
-         cv::Mat grayImage(image->height, image->width, CV_8UC1, (void *)image->data.data(), stride);
-         cv::cvtColor(grayImage, colorImage, cv::COLOR_GRAY2BGR);
-      }
+   cv::Mat    colorImage = cv::Mat(image->height, image->width, CV_8UC3, (void *)image->data.data(), stride);
    //cv::Mat    colorImage(image->width, image->height, CV_16UC3);
    //cvImage = cv::Mat(image->height, image->width, CV_8U, (void *)image->data.data(),image->row_stride);
    //cv::Mat colorImage(image->width, image->height, CV_8UC3);
@@ -274,20 +289,6 @@ void image_t_callback (const lcm::ReceiveBuffer *rbuf, const std::string& channe
    //cv::cvtColor(inputImage,colorImage,cv::COLOR_BayerBG2RGB,0);
    // equalize the histogram
    cv::Size destSize = imageProviderThread[camNum]->getDestSize();
-   bool isColor = imageProviderThread[camNum]->getisColor();
-   if(isColor)
-      {
-        // cv::cvtColor(inputImage,colorImage,cv::COLOR_BayerRG2BGR,0);
-          /*cv::namedWindow("windowName"); // Create a window
-
-          cv::imshow("windowName", colorImage); // Show our image inside the created window.
-
-          cv::waitKey(0); // Wait for any keystroke in the window
-
-          cv::destroyWindow("windowName"); //destroy the created window*
-*/
-      }
-   //if(!isColor)
    {
       bool shouldIHistogram = imageProviderThread[camNum]->getHistogramDisplay();
       if(shouldIHistogram)
@@ -337,7 +338,7 @@ void image_t_callback (const lcm::ReceiveBuffer *rbuf, const std::string& channe
 
             cvtColor(ycrcb,equalized,cv::COLOR_YCrCb2BGR);
             //cv::equalizeHist(inputImage,equalized);
-            cv::resize(equalized,displayImage[camNum],destSize,0.0,0.0);
+            cv::resize(equalized,processedImage,destSize,0.0,0.0);
          }
       else if(shouldIStretch)
          {
@@ -351,18 +352,23 @@ void image_t_callback (const lcm::ReceiveBuffer *rbuf, const std::string& channe
             cv:: merge(channels,ycrcb);
 
             cvtColor(ycrcb,stretched,cv::COLOR_YCrCb2BGR);
-            cv::resize(stretched,displayImage[camNum],destSize,0.0,0.0);
+            cv::resize(stretched,processedImage,destSize,0.0,0.0);
 
          }
       else
          {
-            cv::resize(colorImage,displayImage[camNum],destSize,0.0,0.0);
+            cv::resize(colorImage,processedImage,destSize,0.0,0.0);
          }
    }
    //else
    //{
      //cv::resize(colorImage,displayImage[camNum],destSize,0.0,0.0);
    //}
+   // cv::Mat assignment only swaps a reference counted pointer
+   imageLock[camNum].lockForWrite();
+   displayImage[camNum] = processedImage;
+   imageLock[camNum].unlock();
+
    imageProviderThread[camNum]->imageSignal();
 
   // imageCount++;
@@ -385,10 +391,8 @@ ImageAcquisitionThread::ImageAcquisitionThread(int threadNum,QWidget *parent) : 
    stopped = false;
   // imageCount = 0;
    whichThread = threadNum;
-   fileno = myLcm->getFileno();
    equalize = false;
    stretch = false;
-   isColor = false;
    getHistogram = false;
    isActive = true;
    imageSub = nullptr;
@@ -442,15 +446,6 @@ cv::Size ImageAcquisitionThread::getDestSize()
    return answer;
 }
 
-bool ImageAcquisitionThread::getisColor()
-{
-   return isColor;
-}
-
-void ImageAcquisitionThread::setColor(bool isIt)
-{
-   isColor = isIt;
-}
 
 void ImageAcquisitionThread::setRescaleSize(int xSize, int ySize)
 {
