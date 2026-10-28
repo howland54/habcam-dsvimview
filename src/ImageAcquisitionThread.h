@@ -49,6 +49,8 @@ public:
    void                                histogramSignal(QVector<float> theRHist,QVector<float> theGHist,QVector<float> thBHist);
    void                                setRescaleSize(int xSize, int ySize);
    cv::Size                            getDestSize();
+   int                                 getCameraNumber();
+   bool                                skipThisFrame();
    void                                setSubscriptionName(char *theName);
    void                                subscribe();
    void                                unsubscribeAll();

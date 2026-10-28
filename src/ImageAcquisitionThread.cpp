@@ -2,7 +2,6 @@
 #include "VimView.h"
 #include "SensorPage.h"
 
-extern ImageAcquisitionThread       *imageProviderThread[MAX_N_OF_CAMERAS];
 extern QReadWriteLock               imageLock[MAX_N_OF_CAMERAS];
 
 //extern cv::Mat    cvImage;
@@ -16,56 +15,15 @@ extern VimView *sensorPage;
 
 char mainWindowName[100];
 
-int leftSkip;
-int rightSkip;
 extern int                                 globalImageSkipValue;
 
 
 
-class State {
-public:
-
-   int usefulVariable;
-};
-
-// handed to the image subscriptions as their user pointer, so it has to outlive them
-static State lcmState;
-
-void image_t_callback (const lcm::ReceiveBuffer *rbuf, const std::string& channel,const image::image_t *image, State *user)
+// camera is the ImageAcquisitionThread that subscribed (its user pointer), so the channel can have any name
+void image_t_callback (const lcm::ReceiveBuffer *rbuf, const std::string& channel,const image::image_t *image, ImageAcquisitionThread *camera)
 {
-
-   int camNum = 99;
-   // qDebug() << "in callback channel = " << channel.c_str();
-
-
-   if(channel == "LeftColor")
-      {
-         camNum = 0;
-         leftSkip++;
-         if(leftSkip % globalImageSkipValue)
-            {
-               return;
-            }
-         else
-            {
-               leftSkip = 0;
-            }
-      }
-   else if(channel == "RightColor")
-      {
-         camNum = 1;
-         rightSkip++;
-         if(rightSkip % globalImageSkipValue)
-            {
-
-               return;
-            }
-         else
-            {
-               rightSkip = 0;
-            }
-      }
-   else
+   int camNum = camera->getCameraNumber();
+   if(camera->skipThisFrame())
       {
          return;
       }
@@ -111,9 +69,9 @@ void image_t_callback (const lcm::ReceiveBuffer *rbuf, const std::string& channe
    //cv::Mat colorImage(image->width, image->height, CV_8UC3);
    //cv::cvtColor(inputImage,colorImage,cv::COLOR_BayerBG2RGB,0);
    // equalize the histogram
-   cv::Size destSize = imageProviderThread[camNum]->getDestSize();
+   cv::Size destSize = camera->getDestSize();
    {
-      bool shouldIHistogram = imageProviderThread[camNum]->getHistogramDisplay();
+      bool shouldIHistogram = camera->getHistogramDisplay();
       if(shouldIHistogram)
          {
             int histSize = 256;
@@ -140,12 +98,12 @@ void image_t_callback (const lcm::ReceiveBuffer *rbuf, const std::string& channe
                   passableGHist[begin] = g_hist.at<float>(begin);
                   passableBHist[begin] = b_hist.at<float>(begin);
                }
-            imageProviderThread[camNum]->histogramSignal(passableRHist,passableGHist,passableBHist);
+            camera->histogramSignal(passableRHist,passableGHist,passableBHist);
 
          }
 
-      bool shouldIEqualize = imageProviderThread[camNum]->getEqualize();
-      bool shouldIStretch = imageProviderThread[camNum]->getStretch();
+      bool shouldIEqualize = camera->getEqualize();
+      bool shouldIStretch = camera->getStretch();
       if(shouldIEqualize)
          {
             cv::Mat equalized;
@@ -192,7 +150,7 @@ void image_t_callback (const lcm::ReceiveBuffer *rbuf, const std::string& channe
    displayImage[camNum] = processedImage;
    imageLock[camNum].unlock();
 
-   imageProviderThread[camNum]->imageSignal();
+   camera->imageSignal();
 
   // imageCount++;
    //double imageTime = image->utime/1000.0;
@@ -218,14 +176,13 @@ ImageAcquisitionThread::ImageAcquisitionThread(int threadNum,QWidget *parent) : 
    getHistogram = false;
    isActive = true;
    imageSub = nullptr;
+   skip = 0;
    if(threadNum == 0)
       {
-         leftSkip = 0;
          snprintf(subscriptionName,63,"LeftColor");
       }
    else
       {
-         rightSkip = 0;
          snprintf(subscriptionName,63,"RightColor");
       }
 
@@ -252,6 +209,23 @@ void ImageAcquisitionThread::setSubscriptionName(char *theName)
    snprintf(subscriptionName,63,"%s",theName);
 }
 
+int ImageAcquisitionThread::getCameraNumber()
+{
+   return whichThread;
+}
+
+// only every globalImageSkipValue'th frame is displayed; skip counts this camera's frames
+bool ImageAcquisitionThread::skipThisFrame()
+{
+   skip++;
+   if(skip % globalImageSkipValue)
+      {
+         return true;
+      }
+   skip = 0;
+   return false;
+}
+
 cv::Size ImageAcquisitionThread::getDestSize()
 {
    cv::Size answer;
@@ -271,9 +245,8 @@ void ImageAcquisitionThread::setRescaleSize(int xSize, int ySize)
 // is dispatched by the LcmThread, which also handles the shared channels.
 void ImageAcquisitionThread::subscribe()
 {
-   lcmState.usefulVariable = 1;
-
-   imageSub = myLcm->subscribeFunction( subscriptionName, &image_t_callback, &lcmState);
+   // pass this camera as the user pointer so the callback knows which camera a frame is for
+   imageSub = myLcm->subscribeFunction( subscriptionName, &image_t_callback, this);
 }
 
 // call only after the LCM thread has stopped, so nothing is inside handleTimeout
