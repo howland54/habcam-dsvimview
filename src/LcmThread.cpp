@@ -1,8 +1,15 @@
 #include "LcmThread.h"
-#include "ImageAcquisitionThread.h"
+#include "CameraChannel.h"
 #include "VimView.h"
 
-extern ImageAcquisitionThread       *imageProviderThread[MAX_N_OF_CAMERAS];
+#include "../../habcam-lcmtypes/image/image/image_parameter_t.hpp"
+#include "../../habcam-lcmtypes/marine_sensor/marine_sensor/marineSensorAltimeter_t.hpp"
+#include "../../habcam-lcmtypes/marine_sensor/marine_sensor/MarineSensorFathometer_t.hpp"
+#include "../../habcam-lcmtypes/marine_sensor/marine_sensor/MarineSensorCtd_t.hpp"
+#include "../../habcam-lcmtypes/marine_sensor/marine_sensor/MarineSensorGPS_t.hpp"
+#include "../../habcam-lcmtypes/marine_sensor/marine_sensor/MarineSensorAttitudeSensor_t.hpp"
+
+extern CameraChannel       *cameraChannel[MAX_N_OF_CAMERAS];
 extern lcm::LCM                     *myLcm;
 extern VimView                      *theMainWindow;
 
@@ -83,7 +90,7 @@ void parameter_t_callback (const lcm::ReceiveBuffer *rbuf, const std::string& ch
    // LOGGING, RECORDING and WRITE_STATUS are system wide; only the per-camera keys need a valid camera
    int camNum = imageParameter->cameraNumber;
    bool isCameraKey = ("EXPOSURE" == imageParameter->key || "GAIN" == imageParameter->key || "TRIGGER_SOURCE" == imageParameter->key);
-   if(isCameraKey && (camNum < 0 || camNum >= MAX_N_OF_CAMERAS || !imageProviderThread[camNum] || !imageProviderThread[camNum]->getIsActive()))
+   if(isCameraKey && (camNum < 0 || camNum >= MAX_N_OF_CAMERAS || !cameraChannel[camNum] || !cameraChannel[camNum]->getIsActive()))
       {
          return;
       }
@@ -209,7 +216,7 @@ LcmThread::LcmThread() : QThread()
    ncdIOSubscription = nullptr;
 }
 
-// call from the GUI thread before start(), see ImageAcquisitionThread::subscribe
+// call from the GUI thread before start(), see CameraChannel::subscribe
 void LcmThread::subscribe()
 {
    lcmState.usefulVariable = 1;

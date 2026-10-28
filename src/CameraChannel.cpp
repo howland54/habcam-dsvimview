@@ -1,4 +1,7 @@
-#include "ImageAcquisitionThread.h"
+#include "CameraChannel.h"
+#include <QDebug>
+#include <QReadWriteLock>
+#include <opencv2/imgproc.hpp>
 #include "VimView.h"
 #include "SensorPage.h"
 
@@ -19,8 +22,8 @@ extern int                                 globalImageSkipValue;
 
 
 
-// camera is the ImageAcquisitionThread that subscribed (its user pointer), so the channel can have any name
-void image_t_callback (const lcm::ReceiveBuffer *rbuf, const std::string& channel,const image::image_t *image, ImageAcquisitionThread *camera)
+// camera is the CameraChannel that subscribed (its user pointer), so the channel can have any name
+void image_t_callback (const lcm::ReceiveBuffer *rbuf, const std::string& channel,const image::image_t *image, CameraChannel *camera)
 {
    int camNum = camera->getCameraNumber();
    if(camera->skipThisFrame())
@@ -164,7 +167,7 @@ void image_t_callback (const lcm::ReceiveBuffer *rbuf, const std::string& channe
 
 
 
-ImageAcquisitionThread::ImageAcquisitionThread(int threadNum,QWidget *parent) : QThread()
+CameraChannel::CameraChannel(int threadNum,QObject *parent) : QObject(parent)
 {
 
    //std::string lcmurl = NULL;
@@ -194,28 +197,28 @@ ImageAcquisitionThread::ImageAcquisitionThread(int threadNum,QWidget *parent) : 
 
 }
 
-void ImageAcquisitionThread::setActive(bool isIt)
+void CameraChannel::setActive(bool isIt)
 {
    isActive = isIt;
 }
 
-bool ImageAcquisitionThread::getIsActive()
+bool CameraChannel::getIsActive()
 {
    return isActive;
 }
 
-void ImageAcquisitionThread::setSubscriptionName(char *theName)
+void CameraChannel::setSubscriptionName(char *theName)
 {
    snprintf(subscriptionName,63,"%s",theName);
 }
 
-int ImageAcquisitionThread::getCameraNumber()
+int CameraChannel::getCameraNumber()
 {
    return whichThread;
 }
 
 // only every globalImageSkipValue'th frame is displayed; skip counts this camera's frames
-bool ImageAcquisitionThread::skipThisFrame()
+bool CameraChannel::skipThisFrame()
 {
    skip++;
    if(skip % globalImageSkipValue)
@@ -226,7 +229,7 @@ bool ImageAcquisitionThread::skipThisFrame()
    return false;
 }
 
-cv::Size ImageAcquisitionThread::getDestSize()
+cv::Size CameraChannel::getDestSize()
 {
    cv::Size answer;
    answer.height = yrescaleSize;
@@ -235,7 +238,7 @@ cv::Size ImageAcquisitionThread::getDestSize()
 }
 
 
-void ImageAcquisitionThread::setRescaleSize(int xSize, int ySize)
+void CameraChannel::setRescaleSize(int xSize, int ySize)
 {
    xrescaleSize = xSize;
    yrescaleSize = ySize;
@@ -243,14 +246,14 @@ void ImageAcquisitionThread::setRescaleSize(int xSize, int ySize)
 // call from the GUI thread before the LCM thread starts: lcm::LCM keeps its subscriptions in an
 // unlocked vector, so subscribing from several threads at once can corrupt it. The image callback
 // is dispatched by the LcmThread, which also handles the shared channels.
-void ImageAcquisitionThread::subscribe()
+void CameraChannel::subscribe()
 {
    // pass this camera as the user pointer so the callback knows which camera a frame is for
    imageSub = myLcm->subscribeFunction( subscriptionName, &image_t_callback, this);
 }
 
 // call only after the LCM thread has stopped, so nothing is inside handleTimeout
-void ImageAcquisitionThread::unsubscribeAll()
+void CameraChannel::unsubscribeAll()
 {
    if(imageSub)
       {
@@ -259,7 +262,7 @@ void ImageAcquisitionThread::unsubscribeAll()
       }
 }
 
-void ImageAcquisitionThread::imageSignal()
+void CameraChannel::imageSignal()
 {
 
    {
@@ -268,38 +271,38 @@ void ImageAcquisitionThread::imageSignal()
 
 }
 
-void ImageAcquisitionThread::histogramSignal(QVector<float> theRHist,QVector<float> theGHist,QVector<float> theBHist)
+void CameraChannel::histogramSignal(QVector<float> theRHist,QVector<float> theGHist,QVector<float> theBHist)
 {
    emit newHistogram(theRHist,theGHist,theBHist);
 }
 
 
-void ImageAcquisitionThread::setEqualize(bool shouldI)
+void CameraChannel::setEqualize(bool shouldI)
 {
    equalize = shouldI;
 }
-void ImageAcquisitionThread::setStretch(bool shouldI)
+void CameraChannel::setStretch(bool shouldI)
 {
    stretch = shouldI;
 }
 
 
-bool ImageAcquisitionThread::getEqualize()
+bool CameraChannel::getEqualize()
 {
    return equalize;
 }
 
-bool ImageAcquisitionThread::getStretch()
+bool CameraChannel::getStretch()
 {
    return stretch;
 }
 
-bool ImageAcquisitionThread::getHistogramDisplay()
+bool CameraChannel::getHistogramDisplay()
 {
    return getHistogram;
 }
 
-void ImageAcquisitionThread::setHistogramDisplay(bool doIt)
+void CameraChannel::setHistogramDisplay(bool doIt)
 {
    getHistogram = doIt;
 }

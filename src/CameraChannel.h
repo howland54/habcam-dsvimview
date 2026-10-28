@@ -1,32 +1,13 @@
-#ifndef IMAGEACQUISITIONTHREAD_H
-#define IMAGEACQUISITIONTHREAD_H
-#include <string>
-#include <atomic>
+#ifndef CAMERACHANNEL_H
+#define CAMERACHANNEL_H
+#include <QObject>
+#include <QVector>
 
-
-#include <QThread>
-#include <QDebug>
-#include <QReadWriteLock>
-
-#include <opencv2/opencv.hpp>
-#include <opencv2/imgcodecs.hpp>
-#include <opencv2/imgcodecs/imgcodecs.hpp>
 #include <opencv2/core/core.hpp>
-#include <opencv2/highgui/highgui.hpp>
 
-
-#include <lcm/lcm.h>
 #include <lcm/lcm-cpp.hpp>
 
 #include "../../habcam-lcmtypes/image/image/image_t.hpp"
-#include "../../habcam-lcmtypes/image/image/image_parameter_t.hpp"
-
-#include "../../habcam-lcmtypes/marine_sensor/marine_sensor/marineSensorAltimeter_t.hpp"
-#include "../../habcam-lcmtypes/marine_sensor/marine_sensor/MarineSensorFathometer_t.hpp"
-#include "../../habcam-lcmtypes/marine_sensor/marine_sensor/MarineSensorCtd_t.hpp"
-#include "../../habcam-lcmtypes/marine_sensor/marine_sensor/MarineSensorGPS_t.hpp"
-#include "../../habcam-lcmtypes/marine_sensor/marine_sensor/MarineSensorAttitudeSensor_t.hpp"
-#include "../../habcam-lcmtypes/ncd_io/ncd_io/NcdIoState_t.hpp"
 
 
 
@@ -34,11 +15,13 @@ using namespace std;
 
 
 
-class ImageAcquisitionThread : public QThread
+// One per camera: its image subscription, display settings and the signals to the GUI.
+// image_t_callback runs on the LcmThread, not on a thread of its own.
+class CameraChannel : public QObject
 {
    Q_OBJECT
 public:
-   explicit ImageAcquisitionThread(int threadNum,QWidget *parent);
+   explicit CameraChannel(int threadNum,QObject *parent = nullptr);
    void                                imageSignal();
    void                                setEqualize(bool shouldI);
    void                                setStretch(bool shouldI);
@@ -54,7 +37,6 @@ public:
    void                                setSubscriptionName(char *theName);
    void                                subscribe();
    void                                unsubscribeAll();
-   void                                setParameterSubscriptionName(char *theName);
    void                                setActive(bool isIt);
    bool                                getIsActive();
 
@@ -84,4 +66,4 @@ signals:
 public slots:
 };
 
-#endif // IMAGEACQUISITIONTHREAD_H
+#endif // CAMERACHANNEL_H

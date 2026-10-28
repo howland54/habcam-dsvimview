@@ -1,11 +1,12 @@
 #include "VimView.h"
 #include "../../dsvimlib/include/IniFile.h"
-#include "ImageAcquisitionThread.h"
+#include "CameraChannel.h"
+#include "../../habcam-lcmtypes/image/image/image_parameter_t.hpp"
 #include "LcmThread.h"
 
 /* 26 Jan 2024 jch attempted to change all references to 16bit collection to 8 bit, tried to reflect change to sparton vice microstrain (just a label) */
 
-extern ImageAcquisitionThread       *imageProviderThread[MAX_N_OF_CAMERAS];
+extern CameraChannel       *cameraChannel[MAX_N_OF_CAMERAS];
 extern QReadWriteLock               imageLock[MAX_N_OF_CAMERAS];
 extern cv::Mat                      cvImage;
 extern cv::Mat                      displayImage[MAX_N_OF_CAMERAS];
@@ -177,11 +178,11 @@ VimView::VimView(char	*startup_file_name)
          imagePairLayout->addLayout(imageLayout);
          imagePairLayout->setAlignment(Qt::AlignLeft);
          qDebug() << "starting image acquisition thread...";
-         imageProviderThread[thisCamera] = new ImageAcquisitionThread(thisCamera,this);
-         imageProviderThread[thisCamera]->setRescaleSize(imageDisplayWidth[thisCamera],imageDisplayHeight[thisCamera]);
+         cameraChannel[thisCamera] = new CameraChannel(thisCamera,this);
+         cameraChannel[thisCamera]->setRescaleSize(imageDisplayWidth[thisCamera],imageDisplayHeight[thisCamera]);
          if(strncmp(subscriptionNames[thisCamera],"NONAME",6))
             {
-               imageProviderThread[thisCamera]->setSubscriptionName(subscriptionNames[thisCamera]);
+               cameraChannel[thisCamera]->setSubscriptionName(subscriptionNames[thisCamera]);
             }
          else
             {
@@ -195,16 +196,16 @@ VimView::VimView(char	*startup_file_name)
                  {
                    snprintf(theSubscriptionName,255,"RightColor");
                  }
-               imageProviderThread[thisCamera]->setSubscriptionName(theSubscriptionName);
+               cameraChannel[thisCamera]->setSubscriptionName(theSubscriptionName);
             }
          free(subscriptionNames[thisCamera]);
          qRegisterMetaType < QVector<float> >("QVector<float>");
 
          // connect before subscribing so a frame can never signal into nothing
-         connect(imageProviderThread[thisCamera],SIGNAL(imUpdate(int)),this,SLOT(updateImage(int)));
-         connect(imageProviderThread[thisCamera],SIGNAL(newHistogram(QVector<float>,QVector<float>,QVector<float>)),vimCameraControl[thisCamera],SLOT(drawHistogram(QVector<float>,QVector<float>,QVector<float>)));
+         connect(cameraChannel[thisCamera],SIGNAL(imUpdate(int)),this,SLOT(updateImage(int)));
+         connect(cameraChannel[thisCamera],SIGNAL(newHistogram(QVector<float>,QVector<float>,QVector<float>)),vimCameraControl[thisCamera],SLOT(drawHistogram(QVector<float>,QVector<float>,QVector<float>)));
 
-         imageProviderThread[thisCamera]->subscribe();
+         cameraChannel[thisCamera]->subscribe();
 
       }
    // one thread handles LCM for everything, including the cameras' images; it runs even with no cameras.
@@ -494,18 +495,18 @@ void VimView::stopTimedStills(int theCameraNumber)
 void VimView::changeThisEqualization(bool equalize, int theCamera)
 {
    equalizeDisplay[theCamera] = equalize;
-   imageProviderThread[theCamera]->setEqualize(equalize);
+   cameraChannel[theCamera]->setEqualize(equalize);
 }
 void VimView::changeThisStretch(bool stretch, int theCamera)
 {
    stretchDisplay[theCamera] = stretch;
-   imageProviderThread[theCamera]->setStretch(stretch);
+   cameraChannel[theCamera]->setStretch(stretch);
 }
 
 void VimView::changeHistogramDisplay(bool doIt, int theCamera)
 {
    histogramDisplay[theCamera] = doIt;
-   imageProviderThread[theCamera]->setHistogramDisplay(doIt);
+   cameraChannel[theCamera]->setHistogramDisplay(doIt);
 }
 
 void VimView::toggleBinning(bool binning, int cameraNumber)
@@ -693,7 +694,7 @@ void VimView::shutDown()
       }
    for(int thisCamera = 0; thisCamera < nOfCameras; thisCamera++)
       {
-         imageProviderThread[thisCamera]->unsubscribeAll();
+         cameraChannel[thisCamera]->unsubscribeAll();
       }
 
    stWinch->close();

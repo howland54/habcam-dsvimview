@@ -45,7 +45,7 @@ SOURCES += main.cpp\
     SensorPage.cpp \
     SystemParameterControl.cpp \
         VimView.cpp \
-    ImageAcquisitionThread.cpp \
+    CameraChannel.cpp \
     LcmThread.cpp \
     VimCameraControl.cpp \
     qcustomplot.cpp \
@@ -54,7 +54,7 @@ SOURCES += main.cpp\
     Stwinch.cpp
 
 HEADERS  += VimView.h \
-    ImageAcquisitionThread.h \
+    CameraChannel.h \
     LcmThread.h \
     PowerButton.h \
     PowerControlWidget.h \
