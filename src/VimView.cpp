@@ -27,8 +27,19 @@ VimView::VimView(char	*startup_file_name)
    globalImageSkipValue = 1;
    numberOfSwitches = 0;
    powerControlWidget = nullptr;
-   // NCD data arrives on the LCM thread; queue it over to the GUI thread
+   // NCD, sensor and status data arrive on the LCM thread; queue them over to the GUI thread
    connect(this, SIGNAL(ncdDataReceived(QByteArray,bool,int)), this, SLOT(updateNCDData(QByteArray,bool,int)), Qt::QueuedConnection);
+   connect(this, SIGNAL(altitudeReceived(double)), this, SLOT(updateAltitude(double)), Qt::QueuedConnection);
+   connect(this, SIGNAL(fathometerReceived(double)), this, SLOT(updateFathometer(double)), Qt::QueuedConnection);
+   connect(this, SIGNAL(calcDepthReceived(double)), this, SLOT(updateCalcDepth(double)), Qt::QueuedConnection);
+   connect(this, SIGNAL(ctdReceived(double,double)), this, SLOT(updateCTD(double,double)), Qt::QueuedConnection);
+   connect(this, SIGNAL(fishAttitudeReceived(double,double,double)), this, SLOT(updateFishAttitude(double,double,double)), Qt::QueuedConnection);
+   connect(this, SIGNAL(gpsReceived(double,double)), this, SLOT(updateGPS(double,double)), Qt::QueuedConnection);
+   connect(this, SIGNAL(exposureActualReceived(double,int)), this, SLOT(updateExposureActual(double,int)), Qt::QueuedConnection);
+   connect(this, SIGNAL(gainActualReceived(double,int)), this, SLOT(updateGainActual(double,int)), Qt::QueuedConnection);
+   connect(this, SIGNAL(triggerSourceReceived(int,int)), this, SLOT(updateTriggerSource(int,int)), Qt::QueuedConnection);
+   connect(this, SIGNAL(writeSuccessReceived(bool)), this, SLOT(updateWriteSuccess(bool)), Qt::QueuedConnection);
+   connect(this, SIGNAL(recordingActuallyPausedReceived(bool)), this, SLOT(updateRecordingActallyPaused(bool)), Qt::QueuedConnection);
    int systemParameterSize;
 
    myLcm = new lcm::LCM("udpm://239.255.76.67:7667?ttl=0");
@@ -213,7 +224,13 @@ VimView::VimView(char	*startup_file_name)
 }
 
 
+// called from the LCM thread; updateAltitude does the work on the GUI thread
 void VimView::setAltitude(double theAltitude)
+{
+   emit altitudeReceived(theAltitude);
+}
+
+void VimView::updateAltitude(double theAltitude)
 {
    stWinch->setAltitude(theAltitude);
    sensorPage->setAltimeter(theAltitude);
@@ -241,12 +258,24 @@ void VimView::updateNCDData(QByteArray theRelayStates, bool checksumError, int e
 }
 
 
+// called from the LCM thread; updateCalcDepth does the work on the GUI thread
 void VimView::setCalcDepth(double theCalcDepth)
+{
+   emit calcDepthReceived(theCalcDepth);
+}
+
+void VimView::updateCalcDepth(double theCalcDepth)
 {
    stWinch->setCalcDepth(theCalcDepth);
 }
 
+// called from the LCM thread; updateFathometer does the work on the GUI thread
 void VimView::setFathometer(double theFathometerValue)
+{
+   emit fathometerReceived(theFathometerValue);
+}
+
+void VimView::updateFathometer(double theFathometerValue)
 {
    stWinch->setFathometer(theFathometerValue);
    sensorPage->setFathometer(theFathometerValue);
@@ -260,7 +289,13 @@ void VimView::setFishDepth(double theDepthValue)
    stWinch->setCalcDepth(calculatedDepth);
 }
 
+// called from the LCM thread; updateCTD does the work on the GUI thread
 void VimView::setCTD(double theDepth, double theT)
+{
+   emit ctdReceived(theDepth, theT);
+}
+
+void VimView::updateCTD(double theDepth, double theT)
 {
   stWinch->setFishDepth(theDepth);
   storedDepth = theDepth;
@@ -269,7 +304,13 @@ void VimView::setCTD(double theDepth, double theT)
   sensorPage->setCTD(theDepth, theT);
 }
 
+// called from the LCM thread; updateFishAttitude does the work on the GUI thread
 void VimView::setFishAttitude(double heading, double pitch, double roll)
+{
+   emit fishAttitudeReceived(heading, pitch, roll);
+}
+
+void VimView::updateFishAttitude(double heading, double pitch, double roll)
 {
   if(this)
   {
@@ -277,7 +318,13 @@ void VimView::setFishAttitude(double heading, double pitch, double roll)
   }
 }
 
+// called from the LCM thread; updateGPS does the work on the GUI thread
 void VimView::setGPS(double latitude, double longitude)
+{
+   emit gpsReceived(latitude, longitude);
+}
+
+void VimView::updateGPS(double latitude, double longitude)
 {
   sensorPage->setGPS(latitude, longitude);
 
@@ -330,7 +377,13 @@ void VimView::pauseRecording(bool pauseIt)
    myLcm->publish("COMMAND_PARAMETERS",&imageParameter);
 
 }
+// called from the LCM thread; updateRecordingActallyPaused does the work on the GUI thread
 void VimView::setRecordingActallyPaused(bool isIt)
+{
+   emit recordingActuallyPausedReceived(isIt);
+}
+
+void VimView::updateRecordingActallyPaused(bool isIt)
 {
    actualRecordingPauseState = isIt;
    systemParameterControl->setRecordingActualState(isIt);
@@ -368,7 +421,13 @@ void VimView::setDisplaySize(int cameraNumber, int width, int height)
    imageDisplayHeight[cameraNumber] = height;
 }
 
+// called from the LCM thread; updateExposureActual does the work on the GUI thread
 void VimView::setExposureActual(double theExposure, int theCamera)
+{
+   emit exposureActualReceived(theExposure, theCamera);
+}
+
+void VimView::updateExposureActual(double theExposure, int theCamera)
 {
 
    if(isActive && theCamera >= 0 && theCamera < nOfCameras)
@@ -377,7 +436,13 @@ void VimView::setExposureActual(double theExposure, int theCamera)
       }
 }
 
+// called from the LCM thread; updateGainActual does the work on the GUI thread
 void VimView::setGainActual(double theGain, int theCamera)
+{
+   emit gainActualReceived(theGain, theCamera);
+}
+
+void VimView::updateGainActual(double theGain, int theCamera)
 {
 
    if(isActive && theCamera >= 0 && theCamera < nOfCameras)
@@ -386,7 +451,13 @@ void VimView::setGainActual(double theGain, int theCamera)
       }
 }
 
+// called from the LCM thread; updateTriggerSource does the work on the GUI thread
 void VimView::setTriggerSource(int theSource, int theCamera)
+{
+   emit triggerSourceReceived(theSource, theCamera);
+}
+
+void VimView::updateTriggerSource(int theSource, int theCamera)
 {
 
    if(isActive && theCamera >= 0 && theCamera < nOfCameras)
@@ -450,7 +521,13 @@ void VimView::toggleBinning(bool binning, int cameraNumber)
 
 }
 
+// called from the LCM thread; updateWriteSuccess does the work on the GUI thread
 void VimView::setWriteSuccess(bool isItSuccessful)
+{
+   emit writeSuccessReceived(isItSuccessful);
+}
+
+void VimView::updateWriteSuccess(bool isItSuccessful)
 {
    systemParameterControl->setWriteSuccess(isItSuccessful);
 }

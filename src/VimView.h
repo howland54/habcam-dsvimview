@@ -99,6 +99,17 @@ public slots:
 private slots:
    void                   updateImage(int theImage);
    void                   updateNCDData(QByteArray theRelayStates, bool checksumError, int errorCode);
+   void                   updateAltitude(double theAltitude);
+   void                   updateFathometer(double theFathometerValue);
+   void                   updateCalcDepth(double theCalcDepth);
+   void                   updateCTD(double theDepth, double theT);
+   void                   updateFishAttitude(double heading, double pitch, double roll);
+   void                   updateGPS(double latitude, double longitude);
+   void                   updateExposureActual(double theExposure, int theCamera);
+   void                   updateGainActual(double theGain, int theCamera);
+   void                   updateTriggerSource(int theSource, int theCamera);
+   void                   updateWriteSuccess(bool isItSuccessful);
+   void                   updateRecordingActallyPaused(bool isIt);
    void                   changeExposureValue(double newExposure, int theCamera);
    void                   changeGainValue(double newGain, int theCamera);
    void                   changeConstancySetting(bool newValue);
@@ -124,6 +135,17 @@ private slots:
 signals:
   void                    closing();
   void                    ncdDataReceived(QByteArray theRelayStates, bool checksumError, int errorCode);
+  void                    altitudeReceived(double theAltitude);
+  void                    fathometerReceived(double theFathometerValue);
+  void                    calcDepthReceived(double theCalcDepth);
+  void                    ctdReceived(double theDepth, double theT);
+  void                    fishAttitudeReceived(double heading, double pitch, double roll);
+  void                    gpsReceived(double latitude, double longitude);
+  void                    exposureActualReceived(double theExposure, int theCamera);
+  void                    gainActualReceived(double theGain, int theCamera);
+  void                    triggerSourceReceived(int theSource, int theCamera);
+  void                    writeSuccessReceived(bool isItSuccessful);
+  void                    recordingActuallyPausedReceived(bool isIt);
 };
 
 #endif // FLYVIEW_H
